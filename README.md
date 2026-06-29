@@ -1,5 +1,7 @@
 # FleetLens
 
+[![CI](https://github.com/amitmishra11/fleetlens/actions/workflows/ci.yml/badge.svg)](https://github.com/amitmishra11/fleetlens/actions/workflows/ci.yml)
+
 FleetLens is a unified runtime observability platform for Spring Boot + Kafka microservice fleets. It combines four instrumentation modules — schema drift detection, distributed trace replay, JVM heap / Kafka lag correlation, and live config auditing — into a single correlated incident timeline, surfaced through a React dashboard and a REST API.
 
 ## Testing & CI
