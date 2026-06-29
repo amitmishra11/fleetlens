@@ -5,9 +5,7 @@ import com.fleetlens.schema.detector.DriftAnalyser;
 import com.fleetlens.schema.detector.DriftReport;
 import com.fleetlens.schema.store.SchemaVersion;
 import com.fleetlens.schema.store.SchemaVersionRepository;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -51,6 +49,9 @@ public class SchemaDriftController {
     public ResponseEntity<DriftReportResponse> diff(@PathVariable String topic,
                                                       @RequestParam int from,
                                                       @RequestParam int to) {
+        if (from < 0 || to < 0) {
+            throw new IllegalArgumentException("Version numbers must be non-negative");
+        }
         SchemaVersion fromVersion = versionRepo.findByTopicAndVersion(topic, from)
             .orElseThrow(() -> new NoSuchElementException("No version " + from + " for topic " + topic));
         SchemaVersion toVersionEntity = versionRepo.findByTopicAndVersion(topic, to)
@@ -64,10 +65,5 @@ public class SchemaDriftController {
     public List<SchemaVersion> breakingSince(@RequestParam String since) {
         Instant sinceInstant = TimeUtils.parseIsoOrNow(since);
         return versionRepo.findByBreakingTrueAndDetectedAtAfter(sinceInstant);
-    }
-
-    @ExceptionHandler(NoSuchElementException.class)
-    public ResponseEntity<String> handleNotFound(NoSuchElementException e) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.getMessage());
     }
 }

@@ -73,6 +73,9 @@ public class TraceReplayController {
                     : mockPort != null ? mockPort : 0;
             String resolvedBaseUrl = body != null && body.targetBaseUrl() != null ? body.targetBaseUrl()
                     : targetBaseUrl;
+            if (resolvedBaseUrl == null || resolvedBaseUrl.isBlank()) {
+                throw new IllegalArgumentException("targetBaseUrl is required (as a query param or in the request body)");
+            }
 
             ReplayBundle bundle = entity.toBundle();
             ReplayResult result = replayEngine.replay(bundle, new ReplayOptions(resolvedPort, resolvedBaseUrl));
@@ -117,7 +120,7 @@ public class TraceReplayController {
     private ReplayBundle withServiceId(ReplayBundle bundle, String serviceId) {
         return new ReplayBundle(
                 bundle.replayId() != null ? bundle.replayId() : UUID.randomUUID().toString(),
-                bundle.traceId(),
+                bundle.traceId() != null ? bundle.traceId() : UUID.randomUUID().toString(),
                 serviceId,
                 bundle.rootSpan(),
                 bundle.downstreamCalls() != null ? bundle.downstreamCalls() : List.of(),
