@@ -1,0 +1,17 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:fleetlens-test;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+
+fleetlens:
+  config:
+    poll-interval-ms: 3600000
+  schema:
+    poll-interval-ms: 3600000
+  memory:
+    poll-interval-ms: 3600000

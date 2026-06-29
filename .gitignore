@@ -1,0 +1,11 @@
+*.hprof
+target/
+node_modules/
+.env
+dist/
+.idea/
+*.iml
+.vscode/
+.fleetlens-run/
+.fleetlens-data/
+.claude/

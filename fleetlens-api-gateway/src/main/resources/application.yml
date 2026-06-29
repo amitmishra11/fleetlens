@@ -1,0 +1,52 @@
+spring:
+  application:
+    name: fleetlens-api-gateway
+  datasource:
+    url: ${DB_URL:jdbc:h2:file:./.fleetlens-data/fleetlens;AUTO_SERVER=TRUE}
+    username: ${DB_USER:fleetlens}
+    password: ${DB_PASSWORD:}
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+  cache:
+    type: none
+
+server:
+  port: ${SERVER_PORT:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,env
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+fleetlens:
+  config:
+    poll-interval-ms: 60000
+  schema:
+    poll-interval-ms: 120000
+    sample-count: 50
+  memory:
+    poll-interval-ms: 30000
+    heap-threshold-percent: 85
+  correlation:
+    window-minutes: 5
+  services:
+    - id: order-service
+      base-url: http://localhost:8090
+      env: dev
+      jmx-host: localhost
+      jmx-port: 9010
+      kafka-consumer-groups:
+        - order-service-group
