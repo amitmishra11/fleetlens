@@ -49,6 +49,16 @@ export interface ServiceDefinition {
   id: string;
   env: string;
   baseUrl?: string;
+  managed: boolean;
+}
+
+export interface RegisterServiceRequest {
+  id: string;
+  baseUrl: string;
+  env?: string;
+  jmxHost?: string;
+  jmxPort?: number;
+  kafkaConsumerGroups?: string[];
 }
 
 export interface ConfigSnapshot {

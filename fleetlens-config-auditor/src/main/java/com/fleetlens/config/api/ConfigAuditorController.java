@@ -1,17 +1,21 @@
 package com.fleetlens.config.api;
 
+import com.fleetlens.common.registry.ServiceDefinition;
+import com.fleetlens.common.registry.ServiceDirectory;
 import com.fleetlens.common.util.JsonUtils;
 import com.fleetlens.common.util.TimeUtils;
-import com.fleetlens.config.ServiceRegistryProperties;
-import com.fleetlens.config.ServiceRegistryProperties.ServiceDefinitionProps;
 import com.fleetlens.config.differ.ConfigChange;
 import com.fleetlens.config.differ.ConfigDiff;
 import com.fleetlens.config.differ.ConfigDiffEngine;
 import com.fleetlens.config.store.ConfigSnapshot;
 import com.fleetlens.config.store.ConfigSnapshotRepository;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -32,11 +36,11 @@ import java.util.stream.Collectors;
 @RequestMapping("/api/v1/config")
 public class ConfigAuditorController {
 
-    private final ServiceRegistryProperties registry;
+    private final ServiceDirectory registry;
     private final ConfigSnapshotRepository snapshotRepo;
     private final ConfigDiffEngine diffEngine;
 
-    public ConfigAuditorController(ServiceRegistryProperties registry,
+    public ConfigAuditorController(ServiceDirectory registry,
                                     ConfigSnapshotRepository snapshotRepo,
                                     ConfigDiffEngine diffEngine) {
         this.registry = registry;
@@ -46,9 +50,35 @@ public class ConfigAuditorController {
 
     @GetMapping("/services")
     public List<ServiceSummaryResponse> listServices() {
-        return registry.getServices().stream()
-                .map(svc -> new ServiceSummaryResponse(svc.getId(), svc.getBaseUrl(), svc.getEnv()))
+        return registry.list().stream()
+                .map(svc -> new ServiceSummaryResponse(svc.id(), svc.baseUrl(), svc.env(), svc.managed()))
                 .collect(Collectors.toList());
+    }
+
+    @PostMapping("/services")
+    public ResponseEntity<ServiceSummaryResponse> registerService(@RequestBody RegisterServiceRequest request) {
+        if (request.id() == null || request.id().isBlank()) {
+            throw new IllegalArgumentException("id is required");
+        }
+        if (request.baseUrl() == null || request.baseUrl().isBlank()) {
+            throw new IllegalArgumentException("baseUrl is required");
+        }
+        ServiceDefinition definition = new ServiceDefinition(
+                request.id(), request.baseUrl(), request.env(),
+                request.jmxHost(), request.jmxPort(), request.kafkaConsumerGroups(),
+                true);
+        registry.register(definition);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(new ServiceSummaryResponse(definition.id(), definition.baseUrl(), definition.env(), true));
+    }
+
+    @DeleteMapping("/services/{serviceId}")
+    public ResponseEntity<Void> unregisterService(@PathVariable String serviceId) {
+        if (!registry.unregister(serviceId)) {
+            throw new IllegalArgumentException(
+                    "No removable (dynamically-registered) service found with id " + serviceId);
+        }
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/services/{serviceId}/latest")
@@ -85,9 +115,9 @@ public class ConfigAuditorController {
         Instant sinceInstant = TimeUtils.parseIsoOrNow(since);
         List<DriftEventResponse> results = new ArrayList<>();
 
-        for (ServiceDefinitionProps svc : registry.getServices()) {
+        for (ServiceDefinition svc : registry.list()) {
             List<ConfigSnapshot> history = snapshotRepo
-                    .findAllByServiceIdAndEnvOrderByCapturedAtDesc(svc.getId(), svc.getEnv());
+                    .findAllByServiceIdAndEnvOrderByCapturedAtDesc(svc.id(), svc.env());
             history.sort(Comparator.comparing(ConfigSnapshot::getCapturedAt));
 
             for (int i = 1; i < history.size(); i++) {
@@ -99,7 +129,7 @@ public class ConfigAuditorController {
                 ConfigDiff diff = diffEngine.diff(prev.getConfigJson(), curr.getConfigJson());
                 if (diff.hasChanges()) {
                     results.add(new DriftEventResponse(
-                            svc.getId(), svc.getEnv(), curr.getCapturedAt(), diff.getChangedKeys()));
+                            svc.id(), svc.env(), curr.getCapturedAt(), diff.getChangedKeys()));
                 }
             }
         }
@@ -113,14 +143,14 @@ public class ConfigAuditorController {
         Set<String> environments = new LinkedHashSet<>();
         Map<String, Map<String, Object>> flattenedByEnv = new LinkedHashMap<>();
 
-        for (ServiceDefinitionProps svc : registry.getServices()) {
-            Optional<ConfigSnapshot> latest = snapshotRepo.findLatest(svc.getId(), svc.getEnv());
+        for (ServiceDefinition svc : registry.list()) {
+            Optional<ConfigSnapshot> latest = snapshotRepo.findLatest(svc.id(), svc.env());
             if (latest.isEmpty()) {
                 continue;
             }
-            environments.add(svc.getEnv());
+            environments.add(svc.env());
             Map<String, Object> flattened = JsonUtils.flatten(latest.get().getConfigJson());
-            flattenedByEnv.merge(svc.getEnv(), flattened, (existing, incoming) -> {
+            flattenedByEnv.merge(svc.env(), flattened, (existing, incoming) -> {
                 Map<String, Object> merged = new LinkedHashMap<>(existing);
                 merged.putAll(incoming);
                 return merged;

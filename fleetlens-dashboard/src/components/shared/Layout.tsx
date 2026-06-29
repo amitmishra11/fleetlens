@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import {
   Activity,
@@ -5,9 +6,11 @@ import {
   LayoutDashboard,
   Radar,
   Replace,
+  Server,
   SlidersHorizontal,
 } from 'lucide-react';
 import clsx from 'clsx';
+import { ServiceManager } from './ServiceManager';
 
 const LINKS = [
   { to: '/', label: 'Overview', icon: LayoutDashboard },
@@ -18,6 +21,8 @@ const LINKS = [
 ];
 
 export function Layout() {
+  const [managingServices, setManagingServices] = useState(false);
+
   return (
     <div className="flex min-h-screen bg-canvas">
       <aside className="flex w-60 flex-col border-r border-border bg-surface">
@@ -49,8 +54,16 @@ export function Layout() {
           ))}
         </nav>
 
-        <div className="border-t border-border px-5 py-4 text-xs text-slate-600">
-          <div className="flex items-center gap-1.5">
+        <div className="flex flex-col gap-3 border-t border-border px-3 py-4">
+          <button
+            type="button"
+            onClick={() => setManagingServices(true)}
+            className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-slate-400 transition-colors hover:bg-surface-hover hover:text-slate-200"
+          >
+            <Server className="size-4" />
+            Manage Services
+          </button>
+          <div className="flex items-center gap-1.5 px-3 text-xs text-slate-600">
             <span className="relative flex size-2">
               <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-60" />
               <span className="relative inline-flex size-2 rounded-full bg-emerald-400" />
@@ -65,6 +78,8 @@ export function Layout() {
           <Outlet />
         </div>
       </main>
+
+      {managingServices && <ServiceManager onClose={() => setManagingServices(false)} />}
     </div>
   );
 }

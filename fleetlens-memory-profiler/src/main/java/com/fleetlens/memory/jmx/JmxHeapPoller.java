@@ -1,8 +1,8 @@
 package com.fleetlens.memory.jmx;
 
 import com.fleetlens.common.event.MemoryPressureEvent;
-import com.fleetlens.memory.config.MemoryProfilerProperties;
-import com.fleetlens.memory.config.ServiceJmxTarget;
+import com.fleetlens.common.registry.ServiceDefinition;
+import com.fleetlens.common.registry.ServiceDirectory;
 import com.fleetlens.memory.store.MemorySnapshotRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,7 +31,7 @@ public class JmxHeapPoller {
     private static final Logger log = LoggerFactory.getLogger(JmxHeapPoller.class);
 
     private final Map<String, JMXConnector> connectors = new ConcurrentHashMap<>();
-    private final MemoryProfilerProperties properties;
+    private final ServiceDirectory registry;
     private final MemorySnapshotRepository snapshotRepo;
     private final ApplicationEventPublisher eventPublisher;
     private final HeapDumpLog heapDumpLog;
@@ -39,9 +39,9 @@ public class JmxHeapPoller {
     @Value("${fleetlens.memory.heap-threshold-percent:85}")
     private double heapThresholdPercent;
 
-    public JmxHeapPoller(MemoryProfilerProperties properties, MemorySnapshotRepository snapshotRepo,
+    public JmxHeapPoller(ServiceDirectory registry, MemorySnapshotRepository snapshotRepo,
                           ApplicationEventPublisher eventPublisher, HeapDumpLog heapDumpLog) {
-        this.properties = properties;
+        this.registry = registry;
         this.snapshotRepo = snapshotRepo;
         this.eventPublisher = eventPublisher;
         this.heapDumpLog = heapDumpLog;
@@ -49,23 +49,26 @@ public class JmxHeapPoller {
 
     @Scheduled(fixedDelayString = "${fleetlens.memory.poll-interval-ms:30000}")
     public void poll() {
-        for (ServiceJmxTarget svc : properties.getServices()) {
+        for (ServiceDefinition svc : registry.list()) {
+            if (svc.jmxHost() == null || svc.jmxPort() == null) {
+                continue;
+            }
             try {
                 pollService(svc);
             } catch (Exception e) {
-                log.error("JMX poll failed for {}", svc.getId(), e);
-                connectors.remove(svc.getId());
+                log.error("JMX poll failed for {}", svc.id(), e);
+                connectors.remove(svc.id());
             }
         }
     }
 
-    private void pollService(ServiceJmxTarget svc) throws Exception {
+    private void pollService(ServiceDefinition svc) throws Exception {
         JMXConnector connector = getOrCreateConnector(svc);
         MBeanServerConnection mbs;
         try {
             mbs = connector.getMBeanServerConnection();
         } catch (Exception e) {
-            connectors.remove(svc.getId());
+            connectors.remove(svc.id());
             connector = getOrCreateConnector(svc);
             mbs = connector.getMBeanServerConnection();
         }
@@ -80,40 +83,40 @@ public class JmxHeapPoller {
         double usedMb = heap.getUsed() / 1024.0 / 1024.0;
         double maxMb = heap.getMax() / 1024.0 / 1024.0;
 
-        snapshotRepo.saveHeap(svc.getId(), usedMb, maxMb, totalGcMs);
+        snapshotRepo.saveHeap(svc.id(), usedMb, maxMb, totalGcMs);
 
         if (heap.getMax() > 0) {
             double usedPct = heap.getUsed() * 100.0 / heap.getMax();
             if (usedPct > heapThresholdPercent) {
-                eventPublisher.publishEvent(new MemoryPressureEvent(svc.getId(), usedPct));
+                eventPublisher.publishEvent(new MemoryPressureEvent(svc.id(), usedPct));
                 triggerHeapDump(mbs, svc);
             }
         }
     }
 
-    private JMXConnector getOrCreateConnector(ServiceJmxTarget svc) {
-        return connectors.computeIfAbsent(svc.getId(), id -> {
+    private JMXConnector getOrCreateConnector(ServiceDefinition svc) {
+        return connectors.computeIfAbsent(svc.id(), id -> {
             try {
-                String url = "service:jmx:rmi:///jndi/rmi://%s:%d/jmxrmi".formatted(svc.getJmxHost(), svc.getJmxPort());
+                String url = "service:jmx:rmi:///jndi/rmi://%s:%d/jmxrmi".formatted(svc.jmxHost(), svc.jmxPort());
                 JMXConnector connector = JMXConnectorFactory.connect(new JMXServiceURL(url));
                 return connector;
             } catch (Exception e) {
-                throw new IllegalStateException("Unable to connect to JMX for " + svc.getId(), e);
+                throw new IllegalStateException("Unable to connect to JMX for " + svc.id(), e);
             }
         });
     }
 
-    private void triggerHeapDump(MBeanServerConnection mbs, ServiceJmxTarget svc) {
+    private void triggerHeapDump(MBeanServerConnection mbs, ServiceDefinition svc) {
         try {
             com.sun.management.HotSpotDiagnosticMXBean diagBean = ManagementFactory.newPlatformMXBeanProxy(
                     mbs, "com.sun.management:type=HotSpotDiagnostic", com.sun.management.HotSpotDiagnosticMXBean.class);
-            String fileName = "fleetlens-%s-%d.hprof".formatted(svc.getId(), System.currentTimeMillis());
+            String fileName = "fleetlens-%s-%d.hprof".formatted(svc.id(), System.currentTimeMillis());
             String path = Path.of(System.getProperty("java.io.tmpdir"), fileName).toString();
             diagBean.dumpHeap(path, true);
-            heapDumpLog.record(new HeapDumpRecord(svc.getId(), path, Instant.now()));
-            log.warn("Heap dump triggered for {} -> {}", svc.getId(), path);
+            heapDumpLog.record(new HeapDumpRecord(svc.id(), path, Instant.now()));
+            log.warn("Heap dump triggered for {} -> {}", svc.id(), path);
         } catch (Exception e) {
-            log.error("Heap dump failed for {} (best-effort, com.sun.management may not be exposed over JMX)", svc.getId(), e);
+            log.error("Heap dump failed for {} (best-effort, com.sun.management may not be exposed over JMX)", svc.id(), e);
         }
     }
 }

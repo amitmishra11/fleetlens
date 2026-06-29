@@ -17,6 +17,7 @@ FleetLens is a unified runtime observability platform for Spring Boot + Kafka mi
 - **Sidecar pattern** for Memory Profiler — runs alongside your service in the same pod, connects via JMX; no bytecode instrumentation
 - **Correlation window is configurable** — default 5 minutes; tighten for high-frequency services, widen for batch jobs
 - **All modules are independently deployable** — use only Schema Drift if that's all you need; they share no runtime coupling beyond the database and the event bus
+- **Register services at runtime, no restart** — add any locally-running Spring Boot service for monitoring (base URL, optional JMX host/port, optional Kafka consumer groups) from the "Manage Services" panel in the dashboard; statically-configured services are protected from accidental removal
 
 ## Quickstart (one command, no Docker)
 

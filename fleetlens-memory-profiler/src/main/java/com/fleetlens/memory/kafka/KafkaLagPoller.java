@@ -1,7 +1,7 @@
 package com.fleetlens.memory.kafka;
 
-import com.fleetlens.memory.config.MemoryProfilerProperties;
-import com.fleetlens.memory.config.ServiceJmxTarget;
+import com.fleetlens.common.registry.ServiceDefinition;
+import com.fleetlens.common.registry.ServiceDirectory;
 import com.fleetlens.memory.store.MemorySnapshotRepository;
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.ListOffsetsResult;
@@ -24,26 +24,26 @@ public class KafkaLagPoller {
     private static final long TIMEOUT_SECONDS = 10;
 
     private final AdminClient adminClient;
-    private final MemoryProfilerProperties properties;
+    private final ServiceDirectory registry;
     private final MemorySnapshotRepository snapshotRepo;
     private final ApplicationEventPublisher eventPublisher;
 
-    public KafkaLagPoller(@Qualifier("kafkaAdminClient") AdminClient adminClient, MemoryProfilerProperties properties,
+    public KafkaLagPoller(@Qualifier("kafkaAdminClient") AdminClient adminClient, ServiceDirectory registry,
                            MemorySnapshotRepository snapshotRepo, ApplicationEventPublisher eventPublisher) {
         this.adminClient = adminClient;
-        this.properties = properties;
+        this.registry = registry;
         this.snapshotRepo = snapshotRepo;
         this.eventPublisher = eventPublisher;
     }
 
     @Scheduled(fixedDelayString = "${fleetlens.memory.poll-interval-ms:30000}")
     public void poll() {
-        for (ServiceJmxTarget svc : properties.getServices()) {
-            for (String groupId : svc.getKafkaConsumerGroups()) {
+        for (ServiceDefinition svc : registry.list()) {
+            for (String groupId : svc.kafkaConsumerGroups()) {
                 try {
-                    pollGroup(svc.getId(), groupId);
+                    pollGroup(svc.id(), groupId);
                 } catch (Exception e) {
-                    log.error("Kafka lag poll failed for service {} group {}", svc.getId(), groupId, e);
+                    log.error("Kafka lag poll failed for service {} group {}", svc.id(), groupId, e);
                 }
             }
         }
